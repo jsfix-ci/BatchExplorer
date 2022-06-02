@@ -10,3 +10,36 @@ steps:
   - template: ../common/publish-artifacts.yml
     parameters:
       folder: linux
+
+  - task: Npm@1
+    inputs:
+      displayName: "Publish Package: @batch/ui-common"
+      command: publish
+      workingDir: /packages/common
+      publishRegistry: useFeed
+      publishFeed: azurebatch/BatchExplorer
+
+  - task: Npm@1
+    inputs:
+      displayName: "Publish Package: @batch/ui-react"
+      command: publish
+      workingDir: /packages/react
+      publishRegistry: useFeed
+      publishFeed: azurebatch/BatchExplorer
+
+  - task: Npm@1
+    inputs:
+      displayName: "Publish Package: @batch/ui-service"
+      command: publish
+      workingDir: /packages/service
+      publishRegistry: useFeed
+      publishFeed: azurebatch/BatchExplorer
+
+  - task: Npm@1
+    inputs:
+      displayName: "Publish Package: @batch/ui-playground"
+      command: publish
+      workingDir: /packages/playground
+      publishRegistry: useFeed
+      publishFeed: azurebatch/BatchExplorer
+
