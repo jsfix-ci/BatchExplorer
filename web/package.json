@@ -69,10 +69,10 @@
   },
   "dependencies": {
     "@batch/common-config": "^1.0.0",
-    "@batch/ui-common": "^1.0.0",
-    "@batch/ui-playground": "^1.0.0",
-    "@batch/ui-react": "^1.0.0",
-    "@batch/ui-service": "^1.0.0",
+    "@batch/ui-common": "0.0.1-dev.1",
+    "@batch/ui-playground": "0.0.1-dev.1",
+    "@batch/ui-react": "0.0.1-dev.1",
+    "@batch/ui-service": "0.0.1-dev.1",
     "@uifabric/azure-themes": "7.5.19"
   },
   "devDependencies": {

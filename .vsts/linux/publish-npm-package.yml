@@ -1,0 +1,12 @@
+parameters:
+  packagePath: ''
+  packageName: ''
+
+steps:
+  - task: Npm@1
+    displayName: "Publish Package: ${{parameters.packageName}}"
+    inputs:
+      command: publish
+      workingDir: ${{parameters.packagePath}}
+      publishRegistry: useFeed
+      publishFeed: BatchExplorer
