@@ -3,12 +3,13 @@ import { ComponentFixture, TestBed, fakeAsync, getTestBed, tick } from "@angular
 import { BrowserModule, By } from "@angular/platform-browser";
 import { Router } from "@angular/router";
 import { RouterTestingModule } from "@angular/router/testing";
-import { click } from "test/utils/helpers";
+import { KeyCode } from "@batch-flask/core/keys";
+import { click, keydown } from "test/utils/helpers";
 import { ClickableComponent } from "./clickable.component";
 
 /* eslint-disable @angular-eslint/component-class-suffix */
 
-describe("ClickableComponent", () => {
+fdescribe("ClickableComponent", () => {
     let fixture: ComponentFixture<TestComponent>;
     let testComponent: TestComponent;
     let de: DebugElement;
@@ -54,6 +55,13 @@ describe("ClickableComponent", () => {
         click(de);
         expect(testComponent.trigger).not.toHaveBeenCalled();
     });
+
+    it("triggers through 'Enter' key", fakeAsync(() => {
+        setup(ClickableWithRouterLinkOnSelf);
+        keydown(de, KeyCode.Enter);
+        tick();
+        expect(testComponent.trigger).toHaveBeenCalledOnce();
+    }));
 });
 
 class TestComponent {
