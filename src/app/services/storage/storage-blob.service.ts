@@ -1,4 +1,5 @@
 import { Injectable, NgZone } from "@angular/core";
+import { BlobUploadCommonResponse, ContainerClient } from "@azure/storage-blob";
 import {
     DataCache,
     EntityView,
@@ -14,7 +15,6 @@ import { File, FileLoadOptions, FileLoader, FileNavigator } from "@batch-flask/u
 import { CloudPathUtils, log } from "@batch-flask/utils";
 import { StorageEntityGetter, StorageListGetter } from "app/services/core";
 import { SharedAccessPolicy } from "app/services/storage/models";
-import { BlobService, createBlobServiceWithSas } from "azure-storage";
 import { Constants } from "common";
 import { AsyncSubject, Observable, from, of, throwError } from "rxjs";
 import { catchError, concat, concatMap, flatMap, map, share, take } from "rxjs/operators";
@@ -77,6 +77,21 @@ export class InvalidSasUrlError extends Error {
 
 // Regex to extract the host, container and blob from a sasUrl
 const storageBlobUrlRegex = /^(https:\/\/[\w\._\-]+)\/([\w\-_]+)\/([\w\-_.]+)\?(.*)$/i;
+
+interface BlobParameters {
+    accountUrl: string;
+    container: string;
+    blob: string;
+    sasToken: string;
+}
+
+function createBlobClient(params: BlobParameters) {
+    const containerClient = new ContainerClient(
+        params.accountUrl + params.sasToken,
+        params.container
+    );
+    return containerClient.getBlockBlobClient(params.blob);
+}
 
 @Injectable({ providedIn: "root" })
 export class StorageBlobService {
@@ -272,22 +287,17 @@ export class StorageBlobService {
     }
 
     public uploadToSasUrl(sasUrl: string, filePath: string): Observable<any> {
-        const subject = new AsyncSubject<BlobService.BlobResult>();
+        const subject = new AsyncSubject<BlobUploadCommonResponse>();
 
-        const { accountUrl, sasToken, container, blob } = this._parseSasUrl(sasUrl);
-        const service = createBlobServiceWithSas(accountUrl, sasToken);
-        service.createBlockBlobFromLocalFile(container, blob, filePath,
-            (error: any, result: BlobService.BlobResult) => {
-                this.zone.run(() => {
-
-                    if (error) {
-                        subject.error(ServerError.fromStorage(error));
-                        subject.complete();
-                    }
+        const blobParams = this._parseSasUrl(sasUrl);
+        const blobClient = createBlobClient(blobParams);
+        this.zone.run(() => {
+            blobClient.uploadFile(filePath)
+                .then(result => {
                     subject.next(result);
-                    subject.complete();
-                });
-            });
+                }).catch(error => subject.error(ServerError.fromStorage(error))
+                ).finally(() => subject.complete());
+        });
 
         return subject.asObservable();
     }
@@ -302,7 +312,7 @@ export class StorageBlobService {
         storageAccountId: string,
         container: string,
         file: string,
-        remotePath: string): Observable<BlobService.BlobResult> {
+        remotePath: string): Observable<BlobUploadCommonResponse> {
 
         return this._callStorageClient(storageAccountId,
             (client) => client.uploadFile(container, file, remotePath), (error) => {
@@ -400,7 +410,7 @@ export class StorageBlobService {
         );
     }
 
-    private _parseSasUrl(sasUrl: string) {
+    private _parseSasUrl(sasUrl: string): BlobParameters {
         const match = storageBlobUrlRegex.exec(sasUrl);
 
         if (match.length < 5) {
