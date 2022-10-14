@@ -1,4 +1,4 @@
-import * as storage from "azure-storage";
+import { StorageSharedKeyCredential } from "@azure/storage-blob";
 import { BlobStorageClientProxy } from "./blob-storage-client-proxy";
 
 export interface StorageAccountSharedKeyOptions {
@@ -19,16 +19,15 @@ export class StorageClientProxyFactory {
     public getBlobServiceForSharedKey(options: StorageAccountSharedKeyOptions) {
         if (!this._compareSharedKeyOptions(options)) {
             this._sharedKeyOptions = options;
-            const connectionString = [
-                `DefaultEndpointsProtocol=https;`,
-                `AccountName=${options.account};`,
-                `AccountKey=${options.key};`,
-                `EndpointSuffix=${options.endpoint};`,
-            ].join("");
-            const blobService = storage.createBlobService(connectionString)
-                .withFilter(new storage.ExponentialRetryPolicyFilter());
 
-            this._blobSharedKeyClient = new BlobStorageClientProxy(blobService);
+            const credential = new StorageSharedKeyCredential(
+                options.account, options.key
+            );
+
+            this._blobSharedKeyClient = new BlobStorageClientProxy(
+                credential,
+                `blob.${options.endpoint}`
+            );
         }
 
         return this._blobSharedKeyClient;

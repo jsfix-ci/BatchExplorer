@@ -1,5 +1,5 @@
+import { BlobSASPermissions, BlobServiceClient, BlobUploadCommonResponse, ContainerSASPermissions, StorageSharedKeyCredential } from "@azure/storage-blob";
 import { EncodingUtils } from "@batch-flask/utils";
-import { BlobService } from "azure-storage";
 import { BlobStorageResult, SharedAccessPolicy, StorageRequestOptions } from "./models";
 
 export interface ListBlobOptions {
@@ -28,16 +28,22 @@ export interface ListBlobResponse {
 }
 
 export class BlobStorageClientProxy {
-    public client: BlobService;
 
-    constructor(blobService: BlobService) {
-        this.client = blobService;
+    private storageService: BlobServiceClient;
+
+    constructor(
+        private credential: StorageSharedKeyCredential,
+        private blobEndpoint: string
+    ) {
+        this.storageService = new BlobServiceClient(
+            `https://${credential.accountName}.${blobEndpoint}`,
+            credential
+        );
     }
 
     /**
-     * Lists blobs from the container that match the prefix. In our case the prefix will be the
-     * taskId and the OutputKind of the task output.
-     * http://azure.github.io/azure-storage-node/BlobService.html#listBlobsSegmentedWithPrefix__anchor
+     * Lists blobs from the container that match the prefix. In our case the
+     * prefix will be the taskId and the OutputKind of the task output.
      *
      * @param {string} container - Name of the storage container
      * @param {string} blobPrefix - The prefix of the blob name. In our case it is the taskId prefix:
@@ -46,100 +52,93 @@ export class BlobStorageClientProxy {
      * @param {string} continuationToken - Token that was returned from the last call, if any
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public listBlobs(
+    public async listBlobs(
         container: string,
         options: ListBlobOptions = {},
-        continuationToken?: any): Promise<BlobStorageResult> {
+        continuationToken?: any
+    ): Promise<BlobStorageResult> {
 
-        // we want to keep the filter and prefix separate for mapping files in the response.
         const prefix = options.folder;
-        const storageOptions: StorageRequestOptions = {
-            delimiter: options.recursive ? null : "/",
-            maxResults: options.limit,
-        };
-        return new Promise((resolve, reject) => {
-            this.client.listBlobsSegmentedWithPrefix(container, prefix, continuationToken, storageOptions,
-                (error, result, response: any) => {
-                    if (error) { return reject(error); }
+        const delimiter = options.recursive ? null : "/";
 
-                    const folders = this._getFolderNames(response).map((name) => {
-                        return {
-                            name: name,
-                            url: `${container}/${name}`,
-                            isDirectory: true,
-                        };
-                    });
+        const client = this.getContainerClient(container);
 
-                    resolve({
-                        data: folders.concat(result.entries.map((blob) => {
-                            return {
-                                name: blob.name,
-                                url: `${container}/${blob.name}`,
-                                isDirectory: false,
-                                properties: {
-                                    contentLength: parseInt(blob.contentLength, 10),
-                                    contentType: blob.contentSettings.contentType,
-                                    creationTime: null,
-                                    lastModified: blob.lastModified,
-                                },
-                            };
-                        })),
-                        continuationToken: result.continuationToken,
-                    });
+        const blobs = [];
+        const pages = client.listBlobsByHierarchy(delimiter, { prefix })
+            .byPage({ continuationToken, maxPageSize: options.limit });
+
+        for await (const page of pages) {
+            const segment = page.segment;
+            for (const prefix of segment.blobPrefixes) {
+                blobs.push({
+                    name: prefix.name,
+                    url: `${container}/${prefix.name}`,
+                    isDirectory: true
                 });
-        });
+            }
+            for (const blob of segment.blobItems) {
+                blobs.push({
+                    name: blob.name,
+                    url: `${container}/${blob.name}`,
+                    isDirectory: false,
+                    properties: {
+                        contentLength: blob.properties.contentLength,
+                        contentType: blob.properties.contentType,
+                        creationTime: null,
+                        lastModified: blob.properties.lastModified,
+                    }
+                });
+            }
+        }
+
+        return { data: blobs, continuationToken };
     }
 
     /**
      * Returns all user-defined metadata, standard HTTP properties, and system
      * properties for the blob.
-     * http://azure.github.io/azure-storage-node/BlobService.html#getBlobProperties__anchor
      *
      * @param {string} container - Name of the storage container
      * @param {string} blobName - Name of the blob file: "myblob.txt"
      * @param {string} blobPrefix - Optional prefix to the blob from the container root: "1001/$TaskOutput/"
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public getBlobProperties(
+    public async getBlobProperties(
         container: string,
         blobName: string,
-        blobPrefix?: string,
-        options?: StorageRequestOptions): Promise<BlobStorageResult> {
+        blobPrefix = "",
+        options?: StorageRequestOptions
+    ): Promise<BlobStorageResult> {
 
-        const blobPath = `${blobPrefix || ""}${blobName}`;
-        return new Promise((resolve, reject) => {
-            this.client.getBlobProperties(container, blobPath, options, (error, result, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve({
-                        data: {
-                            name: blobName,
-                            url: `${container}/${blobPath}`,
-                            isDirectory: false,
-                            properties: {
-                                contentLength: parseInt(result.contentLength, 10),
-                                contentType: result.contentSettings.contentType,
-                                creationTime: null,
-                                lastModified: result.lastModified,
-                            },
-                        },
-                    });
-                }
-            });
-        });
+        const client = this.getBlobClient(container, blobName);
+        const blobPath = blobPrefix + blobName;
+        const props = await client.getProperties(options);
+
+        return {
+            data: {
+                name: blobName,
+                url: `${container}/${blobPath}`,
+                isDirectory: false,
+                properties: {
+                    contentLength: props.contentLength,
+                    contentType: props.contentType,
+                    creationTime: null,
+                    lastModified: props.lastModified,
+                },
+            },
+        };
     }
 
     /**
      * Downloads a blob into a text string.
-     * http://azure.github.io/azure-storage-node/BlobService.html#getBlobToText__anchor
+     *
      * @param {string} container - Name of the storage container
      * @param {string} blob - Fully prefixed blob path: "1001/$TaskOutput/myblob.txt"
      * @param {StorageRequestOptions} options - Optional request parameters
      */
     public async getBlobContent(container: string, blob: string, options?: StorageRequestOptions) {
         const buffer = await this._getBlobAsBuffer(container, blob, options);
-        const {encoding} = await EncodingUtils.detectEncodingFromBuffer({ buffer, bytesRead: buffer.length });
+        const { encoding } = await EncodingUtils.detectEncodingFromBuffer({ buffer, bytesRead: buffer.length });
         let content;
         if (encoding) {
             content = new TextDecoder(encoding).decode(buffer);
@@ -152,246 +151,183 @@ export class BlobStorageClientProxy {
 
     /**
      * Downloads a blob into a file.
-     * http://azure.github.io/azure-storage-node/BlobService.html#getBlobToLocalFile__anchor
-     * Note: this returns a SpeedSummary object that can list the percent complete. Can't see any
-     * implementation of this in the docs. Might be useful at some point.
+     *
      * @param {string} container - Name of the storage container
      * @param {string} blob - Fully prefixed blob path: "1001/$TaskOutput/myblob.txt"
      * @param {string} localFileName - The local path to the file to be downloaded.
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public getBlobToLocalFile(container: string, blob: string, localFileName: string, options?: StorageRequestOptions) {
-        return new Promise((resolve, reject) => {
-            this.client.getBlobToLocalFile(container, blob, localFileName, options, (error, result, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    // resolve with no content
-                    resolve({});
-                }
-            });
-        });
+    public async getBlobToLocalFile(
+        container: string,
+        blob: string,
+        localFileName: string,
+        options?: StorageRequestOptions
+    ): Promise<void> {
+        const client = this.getBlobClient(container, blob);
+        await client.downloadToFile(localFileName, undefined, undefined,
+            options);
+        return;
     }
 
     /**
-     * Marks the specified blob or snapshot for deletion if it exists. The blob is later deleted during
-     * garbage collection. If a blob has snapshots, you must delete them when deleting the blob by setting
-     * the deleteSnapshots option.
-     * http://azure.github.io/azure-storage-node/BlobService.html#deleteBlobIfExists__anchor
+     * Marks the specified blob or snapshot for deletion if it exists. The blob
+     * is later deleted during garbage collection. If a blob has snapshots, you
+     * must delete them when deleting the blob by setting the deleteSnapshots
+     * option.
      *
      * @param {string} container - ID of the storage container
      * @param {string} blob - Fully prefixed blob path: "1001/$TaskOutput/myblob.txt"
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public deleteBlobIfExists(container: string, blob: string, options?: StorageRequestOptions)
+    public async deleteBlobIfExists(container: string, blob: string, options?: StorageRequestOptions)
         : Promise<boolean> {
 
-        return new Promise((resolve, reject) => {
-            this.client.deleteBlobIfExists(container, blob, options, (error, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve(response);
-                }
-            });
-        });
+        const client = this.getBlobClient(container, blob);
+        const response = await client.deleteIfExists(options);
+        return response.succeeded;
     }
 
     /**
-     * Lists a segment containing a collection of container items whose names begin with the specified
-     * prefix under the specified account. By default the prefix will generally be "grp-" as this is the
-     * NCJ prefix for file group containers, but can aso be anything we like in order to get any
-     * arbritrary container.
-     * http://azure.github.io/azure-storage-node/BlobService.html#listContainersSegmentedWithPrefix__anchor
+     * Lists a segment containing a collection of container items whose names
+     * begin with the specified prefix under the specified account. By default
+     * the prefix will generally be "grp-" as this is the NCJ prefix for file
+     * group containers, but can aso be anything we like in order to get any
+     * arbitrary container.
      *
      * @param {string} prefix - Container name prefix including filter, or null.
-     * @param {string} filter - Filter in addition to name prefix.
      * @param {string} continuationToken - Token that was returned from the last call, if any
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public listContainersWithPrefix(
-        startswith: string,
+    public async listContainersWithPrefix(
+        prefix: string,
         continuationToken?: any,
-        options?: StorageRequestOptions): Promise<BlobStorageResult> {
+        options?: StorageRequestOptions
+    ): Promise<BlobStorageResult> {
 
-        return new Promise((resolve, reject) => {
-            this.client.listContainersSegmentedWithPrefix(startswith, continuationToken, options,
-                (error, result, response) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        resolve({
-                            data: result.entries.map((container) => {
-                                return {
-                                    ...container,
-                                    id: container.name,
-                                };
-                            }),
-                            continuationToken: result.continuationToken,
-                        });
-                    }
+        const containers = []
+        const pages = this.storageService
+            .listContainers({ prefix, ...options })
+            .byPage(continuationToken);
+        for await (const page of pages) {
+            for (const container of page.containerItems) {
+                containers.push({
+                    ...container,
+                    id: container.name
                 });
-        });
+            }
+        }
+        return {
+            data: containers,
+            continuationToken
+        };
     }
 
     /**
-     * Returns all user-defined metadata and system properties for the specified container.
-     * The data returned does not include the container's list of blobs.
-     * http://azure.github.io/azure-storage-node/BlobService.html#getContainerProperties__anchor
-     *
-     * @param {string} container - Name of the storage container
-     * @param {string} prefix - Container name prefix to be remove from the display name.
-     * @param {StorageRequestOptions} options - Optional request parameters
-     */
-    public getContainerProperties(container: string, prefix: string, options?: StorageRequestOptions)
-        : Promise<BlobStorageResult> {
-
-        return new Promise((resolve, reject) => {
-            this.client.getContainerProperties(container, options, (error, result, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve({
-                        data: {
-                            ...result,
-                            id: result.name,
-                        },
-                    });
-                }
-            });
-        });
-    }
-
-    /**
-     * Marks the specified container for deletion. The container and any blobs contained within
-     * it are later deleted during garbage collection.
-     * http://azure.github.io/azure-storage-node/BlobService.html#deleteContainer__anchor
+     * Returns all user-defined metadata and system properties for the
+     * specified container. The data returned does not include the container's
+     * list of blobs.
      *
      * @param {string} container - Name of the storage container
      * @param {StorageRequestOptions} options - Optional request parameters
      */
-    public deleteContainer(container: string, options?: StorageRequestOptions)
-        : Promise<void> {
+    public async getContainerProperties(
+        container: string,
+        options?: StorageRequestOptions
+    ): Promise<BlobStorageResult> {
 
-        return new Promise((resolve, reject) => {
-            this.client.deleteContainer(container, options, (error, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve();
-                }
-            });
-        });
+        const client = this.getContainerClient(container);
+        const response = await client.getProperties(options);
+
+        return { data: response };
+    }
+
+    /**
+     * Marks the specified container for deletion. The container and any blobs
+     * contained within it are later deleted during garbage collection.
+     *
+     * @param {string} container - Name of the storage container
+     * @param {StorageRequestOptions} options - Optional request parameters
+     */
+    public async deleteContainer(
+        container: string,
+        options?: StorageRequestOptions
+    ): Promise<void> {
+        await this.storageService.deleteContainer(container, options);
+        return;
     }
 
     /**
      * Creates a new container under the specified account.
      * If a container with the same name already exists, the operation fails.
-     * http://azure.github.io/azure-storage-node/BlobService.html#createContainer__anchor
      *
      * @param {string} container - Name of the storage container
      */
-    public createContainer(containerName: string)
-        : Promise<void> {
-
-        return new Promise((resolve, reject) => {
-            this.client.createContainer(containerName, (error, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve();
-                }
-            });
-        });
+    public async createContainer(containerName: string): Promise<void> {
+        await this.storageService.createContainer(containerName);
+        return;
     }
 
     /**
-     * Creates a new container under the specified account if it doesn't exsits.
+     * Creates a new container under the specified account if it doesn't exists.
      *
      * @param {string} container - Name of the storage container
+     * @returns {boolean} whether a new container was created
      */
-    public createContainerIfNotExists(containerName: string)
-        : Promise<void> {
-
-        return new Promise((resolve, reject) => {
-            this.client.createContainerIfNotExists(containerName, (error, response) => {
-                if (error) {
-                    reject(error);
-                } else {
-                    resolve();
-                }
-            });
-        });
+    public async createContainerIfNotExists(
+        containerName: string,
+        options?: StorageRequestOptions
+    ): Promise<boolean> {
+        const client = this.getContainerClient(containerName);
+        const response = await client.createIfNotExists(options);
+        return response.succeeded;
     }
 
-    /**
-     * Retrieves a shared access signature token.
-     * http://azure.github.io/azure-storage-node/BlobService.html#generateSharedAccessSignature__anchor
-     *
-     * @param {string} container - Name of the storage container
-     * @param {string} sharedAccessPolicy - The shared access policy
-     */
-    public generateSharedAccessSignature(
-        container: string, blob: string, sharedAccessPolicy: SharedAccessPolicy): string {
-        return this.client.generateSharedAccessSignature(container, blob, sharedAccessPolicy, null);
+    public async generateSasUrl(
+        container: string,
+        blob?: string,
+        accessPolicy?: SharedAccessPolicy
+    ): Promise<string> {
+        const permissions = accessPolicy.AccessPolicy.Permissions;
+        if (blob) {
+            return this.getBlobClient(container, blob).generateSasUrl({
+                permissions: BlobSASPermissions.parse(permissions)
+            });
+        } else {
+            return this.getContainerClient(container).generateSasUrl({
+                permissions: ContainerSASPermissions.parse(permissions)
+            });
+        }
     }
 
     /**
      * Retrieves a blob or container URL.
-     * http://azure.github.io/azure-storage-node/BlobService.html#getUrl__anchor
      *
      * @param {string} container - Name of the storage container
      * @param {string} blob - Optional blob name.
      * @param {string} sasToken - The Shared Access Signature token.
      */
     public getUrl(container: string, blob?: string, sasToken?: string): string {
-        return this.client.getUrl(container, blob, sasToken);
+        return [
+            `https://${this.credential.accountName}.${this.blobEndpoint}`,
+            container,
+            blob ? `/${blob}${sasToken}` : sasToken
+        ].join("/");
     }
 
-    public async uploadFile(container: string, file: string, remotePath: string): Promise<BlobService.BlobResult> {
-        return new Promise<BlobService.BlobResult>((resolve, reject) => {
-            this.client.createBlockBlobFromLocalFile(container, remotePath, file,
-                (error: any, result: BlobService.BlobResult) => {
-                    if (error) { return reject(error); }
-                    resolve(result);
-                });
-        });
+    public async uploadFile(container: string, file: string, blobName: string): Promise<BlobUploadCommonResponse> {
+        return this.getBlobClient(container, blobName).uploadFile(file);
     }
 
-    /**
-     * Return the list of folder names return by listing blobs with a delimiter
-     * @param response
-     */
-    private _getFolderNames(response: ListBlobResponse) {
-        const results = response.body["EnumerationResults"]["Blobs"];
-        const blobPrefix = results["BlobPrefix"];
-        if (!blobPrefix) {
-            return [];
-        }
-        const data = Array.isArray(blobPrefix) ? blobPrefix : [blobPrefix];
-        return data.map(x => x["Name"].slice(0, -1));
+    private getContainerClient(container: string) {
+        return this.storageService.getContainerClient(container);
+    }
+
+    private getBlobClient(container: string, blobName: string) {
+        return this.getContainerClient(container).getBlockBlobClient(blobName);
     }
 
     private _getBlobAsBuffer(container: string, blob: string, options: StorageRequestOptions): Promise<Buffer> {
-        return new Promise((resolve, reject) => {
-            const chunks = [];
-            const stream = this.client.createReadStream(container, blob, options, (error, text, response) => {
-                if (error) {
-                    reject(error);
-                }
-            });
-            stream.on("data", (chunk) => {
-                chunks.push(chunk);
-            });
-
-            stream.on("end", () => {
-                const buffer = Buffer.concat(chunks);
-                resolve(buffer);
-            });
-
-            stream.on("error", (error) => {
-                reject(error);
-            });
-        });
+        return this.getBlobClient(container, blob)
+            .downloadToBuffer(null, null, options);
     }
 }

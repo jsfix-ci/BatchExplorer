@@ -27,9 +27,15 @@ export interface ListBlobParams {
 }
 
 export interface BlobFileParams extends ListBlobParams {
-    storageAccountId: string;
     blobPrefix?: string;
     blobName?: string;
+}
+
+export interface CreateBlobParams {
+    accountUrl: string;
+    container: string;
+    blob: string;
+    sasToken: string;
 }
 
 export interface BlobContentResult {
@@ -78,14 +84,7 @@ export class InvalidSasUrlError extends Error {
 // Regex to extract the host, container and blob from a sasUrl
 const storageBlobUrlRegex = /^(https:\/\/[\w\._\-]+)\/([\w\-_]+)\/([\w\-_.]+)\?(.*)$/i;
 
-interface BlobParameters {
-    accountUrl: string;
-    container: string;
-    blob: string;
-    sasToken: string;
-}
-
-function createBlobClient(params: BlobParameters) {
+function createBlobClient(params: CreateBlobParams) {
     const containerClient = new ContainerClient(
         params.accountUrl + params.sasToken,
         params.container
@@ -278,8 +277,7 @@ export class StorageBlobService {
         sharedAccessPolicy: SharedAccessPolicy): Observable<string> {
 
         return this._callStorageClient(storageAccountId, (client) => {
-            const sasToken = client.generateSharedAccessSignature(container, blob, sharedAccessPolicy);
-            return Promise.resolve(client.getUrl(container, blob, sasToken));
+            return client.generateSasUrl(container, blob, sharedAccessPolicy);
         }, (error) => {
             // TODO-Andrew: test that errors are caught
             log.error(`Error generating container SAS: ${container}`, { ...error });
@@ -306,16 +304,16 @@ export class StorageBlobService {
      * Upload a single file to storage.
      * @param container Container Id
      * @param file Absolute path to the local file
-     * @param remotePath Blob name
+     * @param blobName Blob name
      */
     public uploadFile(
         storageAccountId: string,
         container: string,
         file: string,
-        remotePath: string): Observable<BlobUploadCommonResponse> {
+        blobName: string): Observable<BlobUploadCommonResponse> {
 
         return this._callStorageClient(storageAccountId,
-            (client) => client.uploadFile(container, file, remotePath), (error) => {
+            (client) => client.uploadFile(container, file, blobName), (error) => {
                 log.error(`Error upload file ${file} to container ${container}`, error);
             });
     }
@@ -410,7 +408,7 @@ export class StorageBlobService {
         );
     }
 
-    private _parseSasUrl(sasUrl: string): BlobParameters {
+    private _parseSasUrl(sasUrl: string): CreateBlobParams {
         const match = storageBlobUrlRegex.exec(sasUrl);
 
         if (match.length < 5) {

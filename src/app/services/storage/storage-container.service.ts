@@ -32,7 +32,7 @@ const storageIgnoredErrors = [
     HttpCode.Conflict,
 ];
 
-@Injectable({providedIn: "root"})
+@Injectable({ providedIn: "root" })
 export class StorageContainerService {
     /**
      * Triggered only when a file group is added through this app.
@@ -121,8 +121,7 @@ export class StorageContainerService {
         container: string,
         sharedAccessPolicy: SharedAccessPolicy): Observable<string> {
         return this._callStorageClient(storageAccountId, (client) => {
-            const sasToken = client.generateSharedAccessSignature(container, null, sharedAccessPolicy);
-            return Promise.resolve(client.getUrl(container, null, sasToken));
+            return client.generateSasUrl(container, null, sharedAccessPolicy);
         }, (error) => {
             log.error(`Error generating container SAS: ${container}`, { ...error });
         });
