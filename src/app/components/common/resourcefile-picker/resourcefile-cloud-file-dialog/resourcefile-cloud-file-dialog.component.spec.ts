@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { FormsModule, ReactiveFormsModule } from "@angular/forms";
 import { MatDialogRef } from "@angular/material/dialog";
 import { By } from "@angular/platform-browser";
+import { BlobSASPermissions } from "@azure/storage-blob";
 import { ListResponse } from "@batch-flask/core";
 import {
     I18nTestingModule, MockControlValueAccessorComponent, controlValueAccessorProvider,
@@ -11,7 +12,6 @@ import { File, FileExplorerConfig, FormModule } from "@batch-flask/ui";
 import { ArmBatchAccount, ArmSubscription, StorageAccount } from "app/models";
 import { BatchAccountService, StorageAccountService } from "app/services";
 import { AutoStorageService, StorageBlobService, StorageContainerService } from "app/services/storage";
-import { BlobUtilities } from "azure-storage";
 import { List } from "immutable";
 import { of } from "rxjs";
 import { ResourceFileCloudFileDialogComponent } from "./resourcefile-cloud-file-dialog.component";
@@ -260,10 +260,11 @@ describe("ResourceFileCloudFileDialogComponent", () => {
                 expect(blobServiceSpy.generateSharedAccessBlobUrl).toHaveBeenCalledOnce();
                 expect(blobServiceSpy.generateSharedAccessBlobUrl).toHaveBeenCalledWith(
                     "auto-storage-id", "foobar", "path/to/file.sh", {
-                        AccessPolicy: jasmine.objectContaining({
-                            Permissions: BlobUtilities.SharedAccessPermissions.READ,
-                        }),
-                    });
+                    AccessPolicy: jasmine.objectContaining({
+                        Permissions: BlobSASPermissions
+                            .from({ read: true }).toString(),
+                    }),
+                });
             });
 
             it("updated the current selection", () => {
@@ -310,10 +311,11 @@ describe("ResourceFileCloudFileDialogComponent", () => {
                 expect(containerServiceSpy.generateSharedAccessUrl).toHaveBeenCalled();
                 expect(containerServiceSpy.generateSharedAccessUrl).toHaveBeenCalledWith(
                     "new-storage-acc-1", "foobar", {
-                        AccessPolicy: jasmine.objectContaining({
-                            Permissions: BlobUtilities.SharedAccessPermissions.READ,
-                        }),
-                    });
+                    AccessPolicy: jasmine.objectContaining({
+                        Permissions: BlobSASPermissions
+                            .from({ read: true }).toString(),
+                    }),
+                });
             });
 
             it("updated the current selection", () => {

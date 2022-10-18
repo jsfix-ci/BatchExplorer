@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 import { MatDialogRef } from "@angular/material/dialog";
+import { BlobSASPermissions } from "@azure/storage-blob";
 import { autobind } from "@batch-flask/core";
 import { FileExplorerConfig, FileExplorerSelectable } from "@batch-flask/ui";
 import { ArmBatchAccount, ResourceFileAttributes } from "app/models";
@@ -8,7 +9,6 @@ import { BatchAccountService, StorageAccountService } from "app/services";
 import { AutoStorageService, StorageBlobService, StorageContainerService } from "app/services/storage";
 import { SharedAccessPolicy } from "app/services/storage/models";
 import { ArmResourceUtils, StorageUtils } from "app/utils";
-import { BlobUtilities } from "azure-storage";
 import { DateTime } from "luxon";
 import { BehaviorSubject, Observable, Subject, of } from "rxjs";
 import {
@@ -203,7 +203,7 @@ export class ResourceFileCloudFileDialogComponent implements OnInit, OnDestroy {
 
         const sas: SharedAccessPolicy = {
             AccessPolicy: {
-                Permissions: BlobUtilities.SharedAccessPermissions.READ,
+                Permissions: BlobSASPermissions.from({ read: true }).toString(),
                 Start: new Date(),
                 Expiry: DateTime.local().plus({ weeks: 1 }).toJSDate(),
             },
@@ -226,7 +226,7 @@ export class ResourceFileCloudFileDialogComponent implements OnInit, OnDestroy {
 
         const sas: SharedAccessPolicy = {
             AccessPolicy: {
-                Permissions: BlobUtilities.SharedAccessPermissions.READ,
+                Permissions: BlobSASPermissions.from({ read: true }).toString(),
                 Start: new Date(),
                 Expiry: DateTime.local().plus({ weeks: 1 }).toJSDate(),
             },

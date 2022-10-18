@@ -1,5 +1,5 @@
 import { Injectable, NgZone } from "@angular/core";
-import { BlobUploadCommonResponse, ContainerClient } from "@azure/storage-blob";
+import { ContainerClient } from "@azure/storage-blob";
 import {
     DataCache,
     EntityView,
@@ -18,7 +18,7 @@ import { SharedAccessPolicy } from "app/services/storage/models";
 import { Constants } from "common";
 import { AsyncSubject, Observable, from, of, throwError } from "rxjs";
 import { catchError, concat, concatMap, flatMap, map, share, take } from "rxjs/operators";
-import { BlobStorageClientProxy, ListBlobOptions } from "./blob-storage-client-proxy";
+import { BlobStorageClientProxy, ListBlobOptions, StorageBlobResponse } from "./blob-storage-client-proxy";
 import { StorageClientService } from "./storage-client.service";
 
 export interface ListBlobParams {
@@ -285,7 +285,7 @@ export class StorageBlobService {
     }
 
     public uploadToSasUrl(sasUrl: string, filePath: string): Observable<any> {
-        const subject = new AsyncSubject<BlobUploadCommonResponse>();
+        const subject = new AsyncSubject<StorageBlobResponse>();
 
         const blobParams = this._parseSasUrl(sasUrl);
         const blobClient = createBlobClient(blobParams);
@@ -310,7 +310,8 @@ export class StorageBlobService {
         storageAccountId: string,
         container: string,
         file: string,
-        blobName: string): Observable<BlobUploadCommonResponse> {
+        blobName: string
+    ): Observable<StorageBlobResponse> {
 
         return this._callStorageClient(storageAccountId,
             (client) => client.uploadFile(container, file, blobName), (error) => {

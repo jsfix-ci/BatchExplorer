@@ -2,6 +2,8 @@ import { BlobSASPermissions, BlobServiceClient, BlobUploadCommonResponse, Contai
 import { EncodingUtils } from "@batch-flask/utils";
 import { BlobStorageResult, SharedAccessPolicy, StorageRequestOptions } from "./models";
 
+export type StorageBlobResponse = BlobUploadCommonResponse;
+
 export interface ListBlobOptions {
     /**
      * Filter for the path.(Relative to the prefix if given)
@@ -314,7 +316,7 @@ export class BlobStorageClientProxy {
         ].join("/");
     }
 
-    public async uploadFile(container: string, file: string, blobName: string): Promise<BlobUploadCommonResponse> {
+    public async uploadFile(container: string, file: string, blobName: string): Promise<StorageBlobResponse> {
         return this.getBlobClient(container, blobName).uploadFile(file);
     }
 
@@ -328,6 +330,6 @@ export class BlobStorageClientProxy {
 
     private _getBlobAsBuffer(container: string, blob: string, options: StorageRequestOptions): Promise<Buffer> {
         return this.getBlobClient(container, blob)
-            .downloadToBuffer(null, null, options);
+            .downloadToBuffer(0, null, options);
     }
 }
