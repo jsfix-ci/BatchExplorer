@@ -206,10 +206,10 @@ export class BlobStorageClientProxy {
         options?: StorageRequestOptions
     ): Promise<BlobStorageResult> {
 
-        const containers = []
+        const containers = [];
         const pages = this.storageService
             .listContainers({ prefix, ...options })
-            .byPage(continuationToken);
+            .byPage({ continuationToken });
         for await (const page of pages) {
             for (const container of page.containerItems) {
                 containers.push({
