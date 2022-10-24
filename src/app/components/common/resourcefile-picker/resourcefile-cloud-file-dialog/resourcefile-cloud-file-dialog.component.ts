@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from "@angular/core";
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 import { MatDialogRef } from "@angular/material/dialog";
-import { BlobSASPermissions } from "@azure/storage-blob";
 import { autobind } from "@batch-flask/core";
 import { FileExplorerConfig, FileExplorerSelectable } from "@batch-flask/ui";
 import { ArmBatchAccount, ResourceFileAttributes } from "app/models";
@@ -203,7 +202,7 @@ export class ResourceFileCloudFileDialogComponent implements OnInit, OnDestroy {
 
         const sas: SharedAccessPolicy = {
             AccessPolicy: {
-                Permissions: BlobSASPermissions.from({ read: true }).toString(),
+                Permissions: this.blobService.permission("read"),
                 Start: new Date(),
                 Expiry: DateTime.local().plus({ weeks: 1 }).toJSDate(),
             },
@@ -226,7 +225,7 @@ export class ResourceFileCloudFileDialogComponent implements OnInit, OnDestroy {
 
         const sas: SharedAccessPolicy = {
             AccessPolicy: {
-                Permissions: BlobSASPermissions.from({ read: true }).toString(),
+                Permissions: this.blobService.permission("read"),
                 Start: new Date(),
                 Expiry: DateTime.local().plus({ weeks: 1 }).toJSDate(),
             },

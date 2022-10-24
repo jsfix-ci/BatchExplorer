@@ -4,7 +4,6 @@ import {
 import {
     ControlValueAccessor, FormArray, FormBuilder, FormControl, NG_VALIDATORS, NG_VALUE_ACCESSOR,
 } from "@angular/forms";
-import { BlobSASPermissions } from "@azure/storage-blob";
 import { UserConfigurationService } from "@batch-flask/core";
 import { FileSystemService } from "@batch-flask/electron";
 import { DialogService } from "@batch-flask/ui";
@@ -202,8 +201,7 @@ export class ResourcefilePickerComponent implements ControlValueAccessor, OnDest
                         this.changeDetector.detectChanges();
                         const sas: SharedAccessPolicy = {
                             AccessPolicy: {
-                                Permissions: BlobSASPermissions
-                                    .from({ read: true }).toString(),
+                                Permissions: this.storageBlobService.permission("read"),
                                 Start: new Date(),
                                 Expiry: DateTime.local().plus({ weeks: 1 }).toJSDate(),
                             },

@@ -1,5 +1,6 @@
 import { Injectable, NgZone } from "@angular/core";
 import { ContainerClient } from "@azure/storage-blob";
+import { BlobSASPermissions } from "@azure/storage-blob";
 import {
     DataCache,
     EntityView,
@@ -269,6 +270,10 @@ export class StorageBlobService {
                 }
             });
         });
+    }
+
+    public permission(permission: "read" | "write"): string {
+        return BlobSASPermissions.from({ [permission]: true }).toString();
     }
 
     public generateSharedAccessBlobUrl(
