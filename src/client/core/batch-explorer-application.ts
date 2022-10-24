@@ -1,4 +1,5 @@
 import { Injectable, Injector } from "@angular/core";
+import { StorageSharedKeyCredential } from "@azure/storage-blob";
 import { LocaleService, TelemetryService, TranslationsLoaderService } from "@batch-flask/core";
 import { AutoUpdateService } from "@batch-flask/electron";
 import { log } from "@batch-flask/utils";
@@ -63,6 +64,9 @@ export class BatchExplorerApplication {
         ipcMain.on(IpcEvent.logoutAndLogin, () => {
             return this.logoutAndLogin();
         });
+
+        ipcMain.on(IpcEvent.storageSharedKeyCredential,
+            (data) => this.getStorageSharedKeyCredential(data));
     }
 
     public async init() {
@@ -331,7 +335,7 @@ export class BatchExplorerApplication {
     }
 
     private _registerFileProtocol() {
-        protocol.registerFileProtocol("file", (request,  callback) => {
+        protocol.registerFileProtocol("file", (request, callback) => {
             const pathName = decodeURI(request.url.replace("file:///", ""));
             callback(pathName);
         });
@@ -354,5 +358,10 @@ export class BatchExplorerApplication {
             details.requestHeaders["User-Agent"] = userAgent;
             callback({ cancel: false, requestHeaders: details.requestHeaders });
         });
+    }
+
+    private async getStorageSharedKeyCredential(data: { account: string, key: string }): Promise<StorageSharedKeyCredential> {
+        console.log("Getting sharekeycred", data.account, data.key);
+        return new StorageSharedKeyCredential(data.account, data.key);
     }
 }

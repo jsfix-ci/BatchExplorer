@@ -1,4 +1,6 @@
 import { StorageSharedKeyCredential } from "@azure/storage-blob";
+import { ElectronRemote } from "@batch-flask/electron";
+import { IpcEvent } from "common/constants";
 import { BlobStorageClientProxy } from "./blob-storage-client-proxy";
 
 export interface StorageAccountSharedKeyOptions {
@@ -16,13 +18,16 @@ export class StorageClientProxyFactory {
     private _sharedKeyOptions: StorageAccountSharedKeyOptions = {} as any;
     private _blobSharedKeyClient: BlobStorageClientProxy = null;
 
-    public getBlobServiceForSharedKey(options: StorageAccountSharedKeyOptions) {
+    constructor(private remote: ElectronRemote) { }
+
+    public async getBlobServiceForSharedKey(options: StorageAccountSharedKeyOptions) {
         if (!this._compareSharedKeyOptions(options)) {
             this._sharedKeyOptions = options;
 
-            const credential = new StorageSharedKeyCredential(
-                options.account, options.key
-            );
+            const credential = await this.remote.send(
+                IpcEvent.storageSharedKeyCredential,
+                { account: options.account, key: options.key }
+            ) as StorageSharedKeyCredential;
 
             this._blobSharedKeyClient = new BlobStorageClientProxy(
                 credential,

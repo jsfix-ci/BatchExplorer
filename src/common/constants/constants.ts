@@ -118,7 +118,7 @@ export const ApiVersion = {
     costManagement: "2019-01-01",
 };
 
-export const providersApiVersion: {[resourceProvider: string]: string} = {
+export const providersApiVersion: { [resourceProvider: string]: string } = {
     "microsoft.batch": ApiVersion.armBatch,
     "microsoft.classicstorage": ApiVersion.armClassicStorage,
     "microsoft.storage": ApiVersion.armStorage,
@@ -212,6 +212,7 @@ export const IpcEvent = {
     logoutAndLogin: "LOGOUT_AND_LOGIN",
     sendTelemetry: "SEND_TELEMETRY",
     log: "SEND_LOG",
+    storageSharedKeyCredential: "AZURE_STORAGE_SHARED_KEY_CREDENTIAL"
 };
 
 export const ExternalApplication = {
